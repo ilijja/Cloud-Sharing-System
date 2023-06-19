@@ -75,10 +75,6 @@ public class Network {
             Thread.currentThread().interrupt();
         }
 
-//        add sample3.txt
-//        pull /Users/ilija/Desktop/cloud/project/res/workspace/5/sample.txt
-//        pull /Users/ilija/Desktop/cloud/project/res/workspace/3/sample3.txt
-
         List<Servent> active = new LinkedList<>(servents);
         active.removeAll(pinged);
 
