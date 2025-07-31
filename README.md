@@ -103,6 +103,3 @@ Two supported topologies:
 
 - Supports both **real** and **simulated** networks  
 - Messages can arrive **out of order** (non-FIFO)  
-- On local runs:
-  - **Random artificial delays** are introduced  
-  - Communication must **not assume localhost**; use **actual IPs**  
