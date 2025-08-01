@@ -1,105 +1,112 @@
-# File Sharing Cloud – Distributed File System
+# Distributed Servent Network
 
-## Description
-
-This project implements a **distributed file-sharing system** for working with **ASCII-encoded text files**. It simulates a virtual file system across multiple nodes in a network.
-
-Each node can store part of the file system, and users interact with the system using a command-line interface (CLI). Nodes can join or leave the network at any time, and the system is resilient to node failures.
-
-## Features
-
-- **Add, pull, and remove files** from the virtual file system
-- **Recursive folder support** when adding or removing directories
-- **CLI-based interaction** with simple commands
-- **Resilient network structure**, including fault detection and recovery
-- **File backup** and replication support
-- **Dynamic node participation** – nodes can join/leave the network during runtime
-- **Supports non-centralized topologies** for higher fault tolerance and performance
-- **Two failure detection thresholds:**
-  - *Soft limit* (e.g., 1000ms): marks a node as suspicious
-  - *Hard limit* (e.g., 10000ms): triggers removal and redistribution of files
-
-## Commands
-
-All commands are entered via CLI, and file paths are relative to the node's working directory (defined in the config file):
-
-- `add name` – Adds a file or folder into the distributed system  
-- `pull name` – Downloads a file from the system to the local working directory  
-- `remove name` – Deletes a file or folder from the system  
-- `stop` – Gracefully shuts down the node
-
-> Note: File names cannot contain spaces.
-
-## Configuration
-
-Each node loads its config file on startup. Example config options:
-
-```properties
-root=./working_dir
-port=5050
-bootstrap_ip=192.168.1.10
-bootstrap_port=5000
-failure_soft_limit=1000
-failure_hard_limit=10000
-```
-
-# System Overview
-
-## Configuration Parameters
-
-- **root** – Local folder used as working directory  
-- **port** – Port where the node listens for incoming messages  
-- **bootstrap_ip / bootstrap_port** – Bootstrap server used only for initial node discovery  
-- **failure_soft_limit** – Time in milliseconds before a node is marked as suspicious  
-- **failure_hard_limit** – Time in milliseconds before a node is considered failed  
+This project implements a simplified distributed system of interconnected nodes ("servents") that communicate through serialized messages and dynamically manage their presence in the network using a decentralized structure inspired by the **Kademlia** protocol.
 
 ---
 
-## Architecture
+## 📌 Overview
 
-Two supported topologies:
-
-### 1. Complete Graph
-- Direct connections between all nodes  
-- Simpler, but not scalable  
-
-### 2. Sparse (Non-complete) Graph _(Recommended)_
-- No single point of failure  
-- Communication is routed through intermediate nodes  
-- System restructures automatically when nodes join or leave  
+Each node (servant) runs on a specific port and host, has a unique identifier, and participates in message-based communication with other nodes. The system supports joining, failure detection, and dynamic maintenance of the network topology.
 
 ---
 
-## Bootstrap Server
+## 🧩 Components
 
-- Used only once during node startup  
-- Forwards the new node to a known active node, then becomes inactive  
-- Does **not** manage or store system topology  
-- Requires **minimal** bandwidth  
+### 1. Servents
 
----
+Each servent is defined by the following:
 
-## Fault Tolerance
-
-- Nodes **regularly ping** their neighbors  
-- If a node is unresponsive:
-  - Marked as **suspicious** after `soft limit`  
-  - Confirmed and removed after `hard limit`  
-- Failed node's data is recovered by a **backup (buddy) node**  
-- System must tolerate **worst-case scenarios** like coordinated multi-node failures  
+- `Host`: Address where it runs (e.g. `localhost`)
+- `Port`: Port it listens to for incoming connections
+- `Id`: Unique ID for internal use
+- `Key`: SHA-1-based unique key used in routing
 
 ---
 
-## File Storage
+### 2. Messages
 
-- Files are stored on the node where they were added  
-- Every file must have **at least one backup**  
-- If a node fails:
-  - Its files are reassigned to other active nodes  
+All communication is handled via **messages**, which are serialized objects sent over sockets between servents. The base class `Message` is extended by various message types, each of which implements a `handle()` method to define its behavior when received.
+
+#### Message Fields:
+
+- `Id`: Unique ID generated via `AtomicInteger`
+- `Text`: Optional content
+- `Sender`: Originating servent
+- `Receiver`: Target servent
+- `Route`: List of intermediate servents the message passed through
+
+#### Supported Message Types:
+
+- `AddMessage`
+- `CheckedMessage`
+- `CheckMessage`
+- `FailMessage`
+- `JoinAskMessage`
+- `JoinTellMessage`
+- `PingMessage`
+- `PongMessage`
+- `PullAskMessage`
+- `PullTellMessage`
+- `RemoveMessage`
+- `RemovedMessage`
+
+#### Message Handling:
+
+- `MessageListener`: Listens for incoming messages on a socket and places them into a `BlockingQueue`
+- `MessageHandler`: Processes messages from the queue in a separate thread and delegates them to the appropriate handler
 
 ---
 
-## Network Simulation
+### 3. Network Joining & Communication
 
-- Supports both **real** and **simulated** networks  
-- Messages can arrive **out of order** (non-FIFO)  
+The system uses a **Kademlia-like** protocol to handle joining and communication:
+
+#### Joining the Network:
+
+1. A new servent contacts a **bootstrap node** at `localhost:10000`.
+2. The bootstrap node:
+   - Generates a unique `Key` for the new servent using SHA-1
+   - Finds closest nodes by XOR distance
+   - Returns a list of neighbors
+3. The new servent sends `Ping` messages to those neighbors
+4. Neighbors respond with `Pong` and add the new node to their set
+
+#### Failure Detection:
+
+- Each servent periodically sends `Ping` messages to known neighbors
+- If no `Pong` is received within `FAILURE_SOFT` ms:
+  - It checks via another neighbor
+- If no response within `FAILURE_HARD` ms:
+  - The node is considered dead
+  - It is removed from the active set
+  - Bootstrap is notified
+
+---
+
+## 🔄 Node Lifecycle Summary
+
+- Nodes listen for messages on dedicated ports
+- Messages are processed asynchronously using threads and queues
+- The network dynamically expands as nodes join
+- Nodes monitor their peers and prune unreachable ones
+- Bootstrap is only used for initial discovery
+
+---
+
+## ⚙️ Technologies Used
+
+- Java
+- Sockets
+- Threading (ExecutorService, custom threads)
+- SHA-1 hashing
+- BlockingQueue for inter-thread communication
+- Custom message serialization
+
+---
+
+## 📝 Notes
+
+- Each message carries a trace of its route (`route` list)
+- Node key uniqueness is ensured via SHA-1 hashing
+- The system does **not** assume reliable or FIFO message delivery
+- Each node operates independently, with decentralized failure recovery
